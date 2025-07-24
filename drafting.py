@@ -3,78 +3,121 @@ import seaborn as sns
 import pandas as pd
 
 # Chargement des données
-df = pd.read_csv("C:\Users\combe\Documents\workplace\drafting_study\raceranger_final_parsed - raceranger_final_parsed.csv")
+df = pd.read_csv("C:xxx/raceranger_final_parsed - raceranger_final_parsed.csv")
 
-# Configuration générale
-sns.set(style="whitegrid")
-plt.rcParams["axes.titlesize"] = 13
+# Fonction pour convertir un temps mm:ss en secondes
+def time_to_seconds(t):
+    if pd.isna(t) or t == '':
+        return 0
+    try:
+        mins, secs = str(t).split(':')
+        return int(mins) * 60 + int(secs)
+    except:
+        return 0
 
-# Création d'une figure pour chaque graphique
-figures = []
+# Nettoyage des noms de colonnes
+df.columns = [col.strip().replace('\n', ' ').replace('\r', '').replace('  ', ' ') for col in df.columns]
 
-# 1. Classement vs Temps total d’infraction
-fig1 = plt.figure(figsize=(12, 6))
-order = df_viz[df_viz["Finish Position"].apply(lambda x: str(x).isdigit())]
-order = order.sort_values(by="Finish Position")
-sns.barplot(data=order, x="Finish Position", y="Total Illegal Time (s)", hue="Sexe")
-plt.title("Temps total d'infraction en fonction du classement")
-plt.ylabel("Temps total d'infraction (s)")
-fig1.savefig("/mnt/data/plot_position_vs_illegal_time.png")
-plt.close(fig1)
+# Nettoyage du champ Finish Position pour être sûr que c’est un nombre
+df['Finish Position'] = pd.to_numeric(df['Finish Position'], errors='coerce')
 
-# 2. Part du temps illégal liée aux YOYOs
-fig2 = plt.figure(figsize=(10, 6))
-df_viz["YOYO Contribution (%)"] = df_viz["Favourite Wheel Illegal Time (s)"] / df_viz["Total Illegal Time (s)"].replace(0, 1) * 100
-sns.histplot(data=df_viz, x="YOYO Contribution (%)", hue="Sexe", bins=20, kde=True, multiple="stack")
-plt.title("Part du temps illégal attribuée aux YOYOs")
-fig2.savefig("/mnt/data/plot_yoyo_share.png")
-plt.close(fig2)
+# Conversion des temps en secondes
+df['Total Illegal Time (s)'] = df['Total Illegal Time'].apply(time_to_seconds)
+df['Favourite Wheel Illegal Time (s)'] = df['Favourite Wheel Illegal Time'].apply(time_to_seconds)
 
-# 3. Corrélation entre YOYOs et position finale
-fig3 = plt.figure(figsize=(8, 6))
-df_numeric = df_viz[df_viz["Finish Position"].apply(lambda x: str(x).isdigit())]
-sns.scatterplot(data=df_numeric, x="YOYOs", y=df_numeric["Finish Position"].astype(int), hue="Sexe")
-plt.title("Nombre de YOYOs vs Position finale")
-plt.ylabel("Position (plus bas = meilleur classement)")
-fig3.savefig("/mnt/data/plot_yoyos_vs_position.png")
-plt.close(fig3)
+# Filtrer le top 10 du classement final
+df_top10 = df.sort_values(by='Finish Position').dropna(subset=['Finish Position']).head(10)
 
-# 4. Top 10 des plus grands suiveurs
-fig4 = plt.figure(figsize=(10, 6))
-top_followers = df_viz.sort_values("Favourite Wheel Illegal Time (s)", ascending=False).head(10)
-sns.barplot(data=top_followers, y="Athlete Name", x="Favourite Wheel Illegal Time (s)", hue="Sexe")
-plt.title("Top 10 des plus grands suiveurs (drafting derrière un même athlète)")
-plt.xlabel("Temps de suivi illégal (s)")
-plt.ylabel("Athlète")
-fig4.savefig("/mnt/data/plot_top_followers.png")
-plt.close(fig4)
+# ==============================
+# 1. Scatter Plot (Top 10 classements)
+# ==============================
 
-# 5. Athlètes avec la plus longue infraction unique
-fig5 = plt.figure(figsize=(10, 6))
-longest_follow = df_viz.sort_values("Single Longest Illegal Follow Time (s)", ascending=False).head(10)
-sns.barplot(data=longest_follow, y="Athlete Name", x="Single Longest Illegal Follow Time (s)", hue="Sexe")
-plt.title("Plus longues infractions uniques")
-plt.xlabel("Temps (s)")
-plt.ylabel("Athlète")
-fig5.savefig("/mnt/data/plot_longest_single_draft.png")
-plt.close(fig5)
+df_filtered = df_top10[['Athlete Name', 'Total Illegal Time (s)', 'Overtakes', 'Sexe']].dropna()
 
-# 6. Comparaison sexe vs stratégie (Boxplots)
-fig6 = plt.figure(figsize=(12, 6))
-melted = df_viz.melt(id_vars=["Sexe"], value_vars=[
-    "Total Illegal Time (s)", "YOYOs", "Overtakes"
-], var_name="Comportement", value_name="Valeur")
-sns.boxplot(data=melted, x="Comportement", y="Valeur", hue="Sexe")
-plt.title("Comportements selon le sexe")
-fig6.savefig("/mnt/data/plot_sex_comparison.png")
-plt.close(fig6)
+sexes = df_filtered['Sexe'].unique()
+for sexe in sexes:
+    subset = df_filtered[df_filtered['Sexe'] == sexe]
+    if subset.empty:
+        continue
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(data=subset, x='Overtakes', y='Total Illegal Time (s)', hue='Athlete Name', palette='tab10', legend=False)
+    plt.title(f'Top 10 finishers - Total Illegal Time vs Overtakes - Sexe: {sexe}')
+    plt.xlabel('Overtakes')
+    plt.ylabel('Total Illegal Time (s)')
+    for _, row in subset.iterrows():
+        plt.annotate(row['Athlete Name'], (row['Overtakes'], row['Total Illegal Time (s)']), fontsize=8, alpha=0.6)
+    plt.tight_layout()
+    plt.show()
 
-# Liens vers les graphes générés
-[
-    "sandbox:/mnt/data/plot_position_vs_illegal_time.png",
-    "sandbox:/mnt/data/plot_yoyo_share.png",
-    "sandbox:/mnt/data/plot_yoyos_vs_position.png",
-    "sandbox:/mnt/data/plot_top_followers.png",
-    "sandbox:/mnt/data/plot_longest_single_draft.png",
-    "sandbox:/mnt/data/plot_sex_comparison.png"
+# ==================================
+# 2. Bar chart des duos (Top 10 finishers)
+# ==================================
+
+# On garde uniquement les duos où l’athlète suiveur est dans le top 10 du classement
+duos = df_top10[['Athlete Name', 'Favourite Wheel Athlete', 'Favourite Wheel Illegal Time (s)', 'YOYOs']].dropna()
+duos = duos[duos['Favourite Wheel Illegal Time (s)'] > 0]
+
+# Agrégation au cas où un athlète a plusieurs cibles
+duos_grouped = duos.groupby(['Athlete Name', 'Favourite Wheel Athlete']).agg({
+    'Favourite Wheel Illegal Time (s)': 'sum',
+    'YOYOs': 'sum'
+}).reset_index()
+
+# Tri du top 10 des duos les plus "draftants"
+duos_top = duos_grouped.sort_values(by='Favourite Wheel Illegal Time (s)', ascending=False).head(10)
+
+# Création des labels
+labels = duos_top.apply(
+    lambda row: f"{row['Athlete Name']} -> {row['Favourite Wheel Athlete']}", axis=1
+)
+
+# Bar chart
+plt.figure(figsize=(10, 6))
+barplot = sns.barplot(
+    x='Favourite Wheel Illegal Time (s)',
+    y=labels,
+    data=duos_top,
+    palette='viridis'
+)
+
+# Annotations YOYOs
+for i, (value, yoyo) in enumerate(zip(duos_top['Favourite Wheel Illegal Time (s)'], duos_top['YOYOs'])):
+    barplot.text(value + 1, i, f"YOYOs: {yoyo}", va='center')
+
+plt.xlabel('Favourite Wheel Illegal Time (s)')
+plt.ylabel('Duo (Suiveur -> Cible)')
+plt.title('Top 10 finishers - Duos avec temps illégal + YOYOs')
+plt.tight_layout()
+plt.show()
+
+
+
+# ==================================
+# 3. Bar chart des données sur la puissance
+# ==================================
+positions = [
+    "Solo (0 m)",
+    "12 m (règlementaire)",
+    "Yo-yo (8–10 m)",
+    "Queue peloton (1–3 m)"
 ]
+puissance = [330, 297, 280, 210]
+
+# Création du graphique
+plt.figure(figsize=(10, 6))
+bars = plt.bar(positions, puissance)
+
+# Étiquettes
+plt.title("Puissance requise pour maintenir 54 km/h selon la position", fontsize=14)
+plt.ylabel("Puissance (W)", fontsize=12)
+plt.ylim(0, 350)
+
+# Valeurs sur les barres
+for bar in bars:
+    yval = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width() / 2.0, yval + 5, f'{int(yval)} W', ha='center', va='bottom')
+
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
+
